@@ -1,16 +1,22 @@
 using UnityEngine;
-using UnityEngine.InputSystem;  // 新Input System
+using UnityEngine.InputSystem;
 
 public class Draggable2DObjectController : MonoBehaviour
 {
     [SerializeField] private Transform targetObject;
+    [SerializeField] private GameObject stampPrefab;
+    [SerializeField] private DocumentManager documentManager; // DocumentManager を参照
+
+    private InnerZoneDetector2D[] innerZones;
+    private Transform outerZoneTransform;
 
     private Vector3 originalScale;
+    private Vector3 originalPosition;
+    private Quaternion originalRotation;
+
     private bool isDragging = false;
     private float rotationZ = 0f;
-
     private int longPressCount = 0;
-
     private float pressTime = 0f;
     private float longPressDuration = 0.5f;
     private bool isPressing = false;
@@ -18,14 +24,19 @@ public class Draggable2DObjectController : MonoBehaviour
     private Vector2 previousInputPosition;
     private Camera mainCamera;
 
+    private int stampCount = 0;
+
+    public void SetStampZones(InnerZoneDetector2D[] zones, Transform outer)
+    {
+        innerZones = zones;
+        outerZoneTransform = outer;
+        stampCount = 0; // ハンコ回数リセット
+    }
+
     void Start()
     {
-        if (targetObject == null)
-        {
-            Debug.LogError("ターゲットオブジェクトが設定されていません！");
-            enabled = false;
-            return;
-        }
+        originalPosition = targetObject.position;
+        originalRotation = targetObject.rotation;
         originalScale = targetObject.localScale;
         mainCamera = Camera.main;
     }
@@ -37,10 +48,8 @@ public class Draggable2DObjectController : MonoBehaviour
         bool inputEnded = false;
         bool inputHeld = false;
 
-        // --- 入力共通化：マウス or タッチ ---
 #if UNITY_EDITOR || UNITY_STANDALONE
         var mouse = Mouse.current;
-
         if (mouse != null)
         {
             inputPosition = mouse.position.ReadValue();
@@ -53,7 +62,6 @@ public class Draggable2DObjectController : MonoBehaviour
         {
             Touch touch = Input.GetTouch(0);
             inputPosition = touch.position;
-
             switch (touch.phase)
             {
                 case TouchPhase.Began: inputStarted = true; break;
@@ -64,12 +72,10 @@ public class Draggable2DObjectController : MonoBehaviour
         }
 #endif
 
-        // --- 長押し検出 ---
         if (inputStarted)
         {
             Vector3 worldPos = mainCamera.ScreenToWorldPoint(inputPosition);
             worldPos.z = 0f;
-
             Collider2D col = Physics2D.OverlapPoint(worldPos);
             if (col != null && col.transform == targetObject)
             {
@@ -90,6 +96,9 @@ public class Draggable2DObjectController : MonoBehaviour
             if (longPressCount >= 3)
             {
                 longPressCount = 0;
+                TryPlaceStamp();
+                targetObject.position = originalPosition;
+                targetObject.rotation = originalRotation;
             }
         }
 
@@ -97,9 +106,7 @@ public class Draggable2DObjectController : MonoBehaviour
         {
             pressTime += Time.deltaTime;
             if (pressTime >= longPressDuration)
-            {
                 isDragging = true;
-            }
         }
 
         if (isDragging && inputHeld)
@@ -108,28 +115,75 @@ public class Draggable2DObjectController : MonoBehaviour
 
             switch (longPressCount)
             {
-                case 0: // 回転モード
-                    float rotationSpeed = 0.2f;
-                    rotationZ -= delta.x * rotationSpeed;
+                case 0:
+                    rotationZ -= delta.x * 0.2f;
                     targetObject.rotation = Quaternion.Euler(0f, 0f, rotationZ);
                     targetObject.localScale = originalScale * 1.3f;
                     break;
-
-                case 1: // 移動モード
+                case 1:
                     Vector3 worldPos = mainCamera.ScreenToWorldPoint(inputPosition);
-                    worldPos.z = 0f;
+                    worldPos.z = -1.0f;
                     targetObject.position = worldPos;
-
-                    // 拡大表示中
                     targetObject.localScale = originalScale * 1.3f;
-                    break;
-
-                case 2: // 何もしない
-                    // Do nothing
                     break;
             }
 
             previousInputPosition = inputPosition;
+        }
+    }
+
+    private void TryPlaceStamp()
+    {
+        if (stampCount >= innerZones.Length)
+        {
+            Debug.Log("ハンコ回数上限 reached");
+            return;
+        }
+
+        Vector3 pos = targetObject.position;
+        Quaternion rot = targetObject.rotation;
+
+        float outerAngle = outerZoneTransform.eulerAngles.z;
+        float stampAngle = rot.eulerAngles.z;
+        float angleDiff = Mathf.Abs(Mathf.DeltaAngle(outerAngle, stampAngle));
+
+        bool validStamp = false;
+
+        foreach (var zone in innerZones)
+        {
+            Collider2D col = zone.GetComponent<Collider2D>();
+            if (col != null && col.OverlapPoint(pos))
+            {
+                bool accepted = zone.RegisterStamp(angleDiff);
+                if (accepted)
+                {
+                    Instantiate(stampPrefab, pos, rot);
+                    stampCount++;
+                    Debug.Log($"✅ ハンコ記録: angleDiff={angleDiff}, zone={zone.name}");
+
+                    if (stampCount >= innerZones.Length)
+                    {
+                        Debug.Log("📄 次の書類へ！");
+                        documentManager.LoadNextDocument();
+                    }
+                }
+                else
+                {
+                    Debug.Log("⚠️ このゾーンには既により正確なハンコがある");
+                }
+                validStamp = true;
+                break;
+            }
+        }
+
+        if (!validStamp)
+        {
+           　Vector3 stampPos = pos;
+            stampPos.z = -0.1f; // 書類より手前に表示
+
+            Instantiate(stampPrefab, stampPos, rot);
+
+            Debug.Log("❌ InnerZone外：スコアなし");
         }
     }
 }
