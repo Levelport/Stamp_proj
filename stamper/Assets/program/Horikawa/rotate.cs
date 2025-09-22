@@ -164,6 +164,12 @@ public class Draggable2DObjectController : MonoBehaviour
                     if (stampCount >= innerZones.Length)
                     {
                         Debug.Log("📄 次の書類へ！");
+                        GameObject[] stamps = GameObject.FindGameObjectsWithTag("stamp");
+                        foreach (GameObject stamp in stamps)
+                        {
+                        Destroy(stamp);
+                        }
+
                         documentManager.LoadNextDocument();
                     }
                 }
