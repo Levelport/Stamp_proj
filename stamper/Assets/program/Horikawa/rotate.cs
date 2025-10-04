@@ -1,11 +1,12 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System.Collections;
 
 public class Draggable2DObjectController : MonoBehaviour
 {
     [SerializeField] private Transform targetObject;
     [SerializeField] private GameObject stampPrefab;
-    [SerializeField] private DocumentManager documentManager; // DocumentManager を参照
+    [SerializeField] private DocumentManager documentManager; // DocumentManagerへの参照
 
     private InnerZoneDetector2D[] innerZones;
     private Transform outerZoneTransform;
@@ -122,7 +123,7 @@ public class Draggable2DObjectController : MonoBehaviour
                     break;
                 case 1:
                     Vector3 worldPos = mainCamera.ScreenToWorldPoint(inputPosition);
-                    worldPos.z = -1.0f;
+                    worldPos.z = -1f;
                     targetObject.position = worldPos;
                     targetObject.localScale = originalScale * 1.3f;
                     break;
@@ -132,74 +133,74 @@ public class Draggable2DObjectController : MonoBehaviour
         }
     }
 
- private void TryPlaceStamp()
-{
-    if (stampCount >= innerZones.Length)
+    private void TryPlaceStamp()
     {
-        Debug.Log("ハンコ回数上限 reached");
-        return;
-    }
-
-    Vector3 pos = targetObject.position;
-    Quaternion rot = targetObject.rotation;
-
-    float outerAngle = outerZoneTransform.eulerAngles.z;
-    float stampAngle = rot.eulerAngles.z;
-    float angleDiff = Mathf.Abs(Mathf.DeltaAngle(outerAngle, stampAngle));
-
-    bool validStamp = false;
-
-    foreach (var zone in innerZones)
-    {
-        Collider2D col = zone.GetComponent<Collider2D>();
-        if (col != null && col.OverlapPoint(pos))
+        if (stampCount >= innerZones.Length)
         {
-            bool accepted = zone.RegisterStamp(angleDiff);
-            if (accepted)
-            {
-                Instantiate(stampPrefab, pos, rot);
-                stampCount++;
-                Debug.Log($"✅ ハンコ記録: angleDiff={angleDiff}, zone={zone.name}");
+            Debug.Log("ハンコ回数上限 reached");
+            return;
+        }
 
-                if (stampCount >= innerZones.Length)
+        Vector3 pos = targetObject.position;
+        Quaternion rot = targetObject.rotation;
+
+        float outerAngle = outerZoneTransform.eulerAngles.z;
+        float stampAngle = rot.eulerAngles.z;
+        float angleDiff = Mathf.Abs(Mathf.DeltaAngle(outerAngle, stampAngle));
+
+        bool validStamp = false;
+
+        foreach (var zone in innerZones)
+        {
+            Collider2D col = zone.GetComponent<Collider2D>();
+            if (col != null && col.OverlapPoint(pos))
+            {
+                bool accepted = zone.RegisterStamp(angleDiff);
+                if (accepted)
                 {
-                    Debug.Log("📄 数秒後に次の書類へ移動");
+                    Instantiate(stampPrefab, pos, rot);
+                    stampCount++;
+                    Debug.Log($"✅ ハンコ記録: angleDiff={angleDiff}, zone={zone.name}");
 
-                    // 数秒後に次のドキュメントをロード
-                    StartCoroutine(DelayedLoadNextDocument(1.5f)); // ← ここで1.5秒のディレイ
+                    if (stampCount >= innerZones.Length)
+                    {
+                        Debug.Log("📄 数秒後に次の書類へ移動");
+
+                        // 1.5秒のディレイ後に次のドキュメントをロード
+                        StartCoroutine(DelayedLoadNextDocument(1.5f));
+                    }
                 }
+                else
+                {
+                    Debug.Log("⚠️ このゾーンには既により正確なハンコがある");
+                }
+                validStamp = true;
+                break;
             }
-            else
-            {
-                Debug.Log("⚠️ このゾーンには既により正確なハンコがある");
-            }
-            validStamp = true;
-            break;
+        }
+
+        if (!validStamp)
+        {
+            Vector3 stampPos = pos;
+            stampPos.z = -0.1f; // 書類より手前に表示
+
+            Instantiate(stampPrefab, stampPos, rot);
+
+            Debug.Log("❌ InnerZone外：スコアなし");
         }
     }
 
-    if (!validStamp)
+    private IEnumerator DelayedLoadNextDocument(float delaySeconds)
     {
-        Vector3 stampPos = pos;
-        stampPos.z = -0.1f; // 書類より手前に表示
+        yield return new WaitForSeconds(delaySeconds);
 
-        Instantiate(stampPrefab, stampPos, rot);
+        // ハンコを削除
+        GameObject[] stamps = GameObject.FindGameObjectsWithTag("stamp");
+        foreach (GameObject stamp in stamps)
+        {
+            Destroy(stamp);
+        }
 
-        Debug.Log("❌ InnerZone外：スコアなし");
+        documentManager.LoadNextDocument();
     }
-}
-
-private System.Collections.IEnumerator DelayedLoadNextDocument(float delaySeconds)
-{
-    yield return new WaitForSeconds(delaySeconds);
-
-    // ハンコを削除
-    GameObject[] stamps = GameObject.FindGameObjectsWithTag("stamp");
-    foreach (GameObject stamp in stamps)
-    {
-        Destroy(stamp);
-    }
-
-    documentManager.LoadNextDocument();
-}
 }
