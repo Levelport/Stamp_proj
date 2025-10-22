@@ -1,45 +1,67 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections;
+using System.Collections.Generic;
 
 public class Draggable2DObjectController : MonoBehaviour
 {
-    [SerializeField] private Transform targetObject;
-    [SerializeField] private GameObject stampPrefab;
-    [SerializeField] private DocumentManager documentManager; // DocumentManagerへの参照
+    [Header("Handlers & Origins")]
+    [SerializeField] private Transform circleHandler;
+    [SerializeField] private Transform squareHandler;
+    [SerializeField] private Transform circleOrigin;
+    [SerializeField] private Transform squareOrigin;
+
+    [Header("Stamp Prefabs")]
+    [SerializeField] private GameObject circleStampPrefab;
+    [SerializeField] private GameObject squareStampPrefab;
+
+    [Header("Visual Feedback")]
+    [SerializeField] private CanvasGroup circleCanvasGroup;
+    [SerializeField] private CanvasGroup squareCanvasGroup;
+
+    [Header("System")]
+    [SerializeField] private DocumentManager documentManager;
 
     private InnerZoneDetector2D[] innerZones;
     private Transform outerZoneTransform;
-
-    private Vector3 originalScale;
-    private Vector3 originalPosition;
-    private Quaternion originalRotation;
-
     private bool isDragging = false;
     private float rotationZ = 0f;
     private int longPressCount = 0;
     private float pressTime = 0f;
     private float longPressDuration = 0.5f;
     private bool isPressing = false;
-
     private Vector2 previousInputPosition;
     private Camera mainCamera;
 
-    private int stampCount = 0;
+    private List<StampType> requiredStamps = new List<StampType>();
+    private int currentStampIndex = 0;
+    private StampType currentStampType;
+
+    private Vector3 circleOriginalScale;
+    private Vector3 squareOriginalScale;
 
     public void SetStampZones(InnerZoneDetector2D[] zones, Transform outer)
     {
         innerZones = zones;
         outerZoneTransform = outer;
-        stampCount = 0; // ハンコ回数リセット
+        currentStampIndex = 0;
+
+        requiredStamps = documentManager.GetRequiredStamps();
+        if (requiredStamps.Count > 0)
+        {
+            currentStampType = requiredStamps[0];
+            SetActiveHandler();
+        }
+
+        ResetHandlerPositions();
     }
 
     void Start()
     {
-        originalPosition = targetObject.position;
-        originalRotation = targetObject.rotation;
-        originalScale = targetObject.localScale;
         mainCamera = Camera.main;
+        circleOriginalScale = circleHandler.localScale;
+        squareOriginalScale = squareHandler.localScale;
+        ResetHandlerPositions();
     }
 
     void Update()
@@ -73,12 +95,15 @@ public class Draggable2DObjectController : MonoBehaviour
         }
 #endif
 
+        Transform handler = GetCurrentHandler();
+        Vector3 originalScale = currentStampType == StampType.Circle ? circleOriginalScale : squareOriginalScale;
+
         if (inputStarted)
         {
             Vector3 worldPos = mainCamera.ScreenToWorldPoint(inputPosition);
             worldPos.z = 0f;
             Collider2D col = Physics2D.OverlapPoint(worldPos);
-            if (col != null && col.transform == targetObject)
+            if (col != null && col.transform == handler)
             {
                 isPressing = true;
                 pressTime = 0f;
@@ -90,7 +115,7 @@ public class Draggable2DObjectController : MonoBehaviour
         {
             isPressing = false;
             isDragging = false;
-            targetObject.localScale = originalScale;
+            handler.localScale = originalScale;
 
             longPressCount++;
 
@@ -98,8 +123,7 @@ public class Draggable2DObjectController : MonoBehaviour
             {
                 longPressCount = 0;
                 TryPlaceStamp();
-                targetObject.position = originalPosition;
-                targetObject.rotation = originalRotation;
+                StartCoroutine(DelayedResetCurrentHandler(0.3f));
             }
         }
 
@@ -118,14 +142,15 @@ public class Draggable2DObjectController : MonoBehaviour
             {
                 case 0:
                     rotationZ -= delta.x * 0.2f;
-                    targetObject.rotation = Quaternion.Euler(0f, 0f, rotationZ);
-                    targetObject.localScale = originalScale * 1.3f;
+                    handler.rotation = Quaternion.Euler(0f, 0f, rotationZ);
+                    handler.localScale = originalScale * 1.3f;
                     break;
+
                 case 1:
                     Vector3 worldPos = mainCamera.ScreenToWorldPoint(inputPosition);
                     worldPos.z = -1f;
-                    targetObject.position = worldPos;
-                    targetObject.localScale = originalScale * 1.3f;
+                    handler.position = worldPos;
+                    handler.localScale = originalScale * 1.3f;
                     break;
             }
 
@@ -135,45 +160,45 @@ public class Draggable2DObjectController : MonoBehaviour
 
     private void TryPlaceStamp()
     {
-        if (stampCount >= innerZones.Length)
-        {
-            Debug.Log("ハンコ回数上限 reached");
+        if (currentStampIndex >= requiredStamps.Count)
             return;
-        }
 
-        Vector3 pos = targetObject.position;
-        Quaternion rot = targetObject.rotation;
+        Transform handler = GetCurrentHandler();
+        Vector3 pos = handler.position;
+        Quaternion rot = handler.rotation;
 
         float outerAngle = outerZoneTransform.eulerAngles.z;
         float stampAngle = rot.eulerAngles.z;
         float angleDiff = Mathf.Abs(Mathf.DeltaAngle(outerAngle, stampAngle));
 
         bool validStamp = false;
+        int score = 0;
 
         foreach (var zone in innerZones)
         {
             Collider2D col = zone.GetComponent<Collider2D>();
             if (col != null && col.OverlapPoint(pos))
             {
-                bool accepted = zone.RegisterStamp(angleDiff);
-                if (accepted)
+                score = zone.RegisterStamp(angleDiff, currentStampType);
+                documentManager.AddScore(score);
+
+                Instantiate(GetStampPrefab(), pos, rot).tag = "stamp";
+
+                if (score >= 70)
                 {
-                    Instantiate(stampPrefab, pos, rot);
-                    stampCount++;
-                    Debug.Log($"✅ ハンコ記録: angleDiff={angleDiff}, zone={zone.name}");
-
-                    if (stampCount >= innerZones.Length)
+                    Debug.Log($"✅ スタンプ成功: {currentStampType}（スコア: {score}）");
+                    currentStampIndex++;
+                    if (currentStampIndex >= requiredStamps.Count)
                     {
-                        Debug.Log("📄 数秒後に次の書類へ移動");
-
-                        // 1.5秒のディレイ後に次のドキュメントをロード
+                        documentManager.OnDocumentCompleted(); // ★ 書類完了を通知
                         StartCoroutine(DelayedLoadNextDocument(1.5f));
                     }
                 }
                 else
                 {
-                    Debug.Log("⚠️ このゾーンには既により正確なハンコがある");
+                    Debug.Log($"⚠ スタンプ失敗（スコア: {score}）");
                 }
+
                 validStamp = true;
                 break;
             }
@@ -182,25 +207,62 @@ public class Draggable2DObjectController : MonoBehaviour
         if (!validStamp)
         {
             Vector3 stampPos = pos;
-            stampPos.z = -0.1f; // 書類より手前に表示
-
-            Instantiate(stampPrefab, stampPos, rot);
-
-            Debug.Log("❌ InnerZone外：スコアなし");
+            stampPos.z = -0.1f;
+            Instantiate(GetStampPrefab(), stampPos, rot).tag = "stamp";
+            Debug.Log("❌ 内部ゾーン外：スコアなし（カウント外）");
         }
     }
 
-    private IEnumerator DelayedLoadNextDocument(float delaySeconds)
+    private IEnumerator DelayedLoadNextDocument(float delay)
     {
-        yield return new WaitForSeconds(delaySeconds);
-
-        // ハンコを削除
+        yield return new WaitForSeconds(delay);
         GameObject[] stamps = GameObject.FindGameObjectsWithTag("stamp");
         foreach (GameObject stamp in stamps)
-        {
             Destroy(stamp);
-        }
 
         documentManager.LoadNextDocument();
+    }
+
+    private Transform GetCurrentHandler() =>
+        currentStampType == StampType.Circle ? circleHandler : squareHandler;
+
+    private Transform GetCurrentOrigin() =>
+        currentStampType == StampType.Circle ? circleOrigin : squareOrigin;
+
+    private GameObject GetStampPrefab() =>
+        currentStampType == StampType.Circle ? circleStampPrefab : squareStampPrefab;
+
+    private void SetActiveHandler()
+    {
+        bool isCircle = currentStampType == StampType.Circle;
+        circleCanvasGroup.alpha = isCircle ? 1f : 0.4f;
+        circleCanvasGroup.interactable = isCircle;
+        squareCanvasGroup.alpha = isCircle ? 0.4f : 1f;
+        squareCanvasGroup.interactable = !isCircle;
+    }
+
+    private void ResetHandlerPositions()
+    {
+        circleHandler.position = circleOrigin.position;
+        circleHandler.rotation = circleOrigin.rotation;
+        squareHandler.position = squareOrigin.position;
+        squareHandler.rotation = squareOrigin.rotation;
+    }
+
+    private IEnumerator DelayedResetCurrentHandler(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        Transform handler = GetCurrentHandler();
+        Transform origin = GetCurrentOrigin();
+
+        handler.position = origin.position;
+        handler.rotation = origin.rotation;
+
+        if (currentStampIndex < requiredStamps.Count)
+        {
+            currentStampType = requiredStamps[currentStampIndex];
+            SetActiveHandler();
+        }
     }
 }

@@ -148,7 +148,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1248781160663871599}
   - component: {fileID: 4065066136520802819}
-  - component: {fileID: 2378321776733384838}
+  - component: {fileID: 3214047679894109431}
   m_Layer: 0
   m_Name: stampPlace
   m_TagString: Untagged
@@ -217,7 +217,7 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 1.7, y: 1.25}
   m_EdgeRadius: 0
---- !u!114 &2378321776733384838
+--- !u!114 &3214047679894109431
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
