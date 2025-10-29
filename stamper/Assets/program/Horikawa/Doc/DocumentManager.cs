@@ -1,187 +1,144 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.SceneManagement;
 
 public class DocumentManager : MonoBehaviour
 {
     [Header("Documents")]
-    [SerializeField] private GameObject[] documentPrefabs;
-    [SerializeField] private Transform spawnPoint;
+    [SerializeField] private GameObject[] documentPrefabs; // 書類プレハブ（bl_Paper等）
+    [SerializeField] private Transform spawnPoint;         // 書類出現位置
 
-    [Header("Stamp")]
-    [SerializeField] private Draggable2DObjectController stampController;
+    [Header("Stamp Controller")]
+    [SerializeField] public StampOperatorController stampController; // ハンコ操作担当
 
-    [Header("People")]
-    [SerializeField] private PersonData[] personDatas;
-    [SerializeField] private GameObject personPrefab;
-    [SerializeField] private Transform personSpawnPoint;
+    [Header("UI")]
+    [SerializeField] public UIManager uiManager;
 
+    private PersonData[] personDatas;
     private GameObject currentDocument;
-    private int currentDocumentIndex = 0;
+    private int currentPersonIndex = 0;
 
-    private List<PersonController> activePeople = new List<PersonController>();
-    private Dictionary<PersonData, List<int>> personScores = new Dictionary<PersonData, List<int>>();
-    private int totalScore = 0;
+    private float totalScore = 0f;
+    private int totalDocuments = 0;
 
     void Start()
     {
-        LoadNextDocument();
+        // ステージCSV読み込み
+        int stageNum = StageDataManager.GetStageNumber();
+        string csvName = $"Stage_{stageNum}";
+        personDatas = PersonCSVLoader.LoadFromCSV(csvName).ToArray();
+
+        uiManager.Initialize(personDatas.Length);
+        StartCoroutine(ProcessPeopleRoutine());
     }
 
-    public List<StampType> GetRequiredStamps()
+    /// <summary>
+    /// 各人物の処理（セリフ→書類→スコア計算）
+    /// </summary>
+    private IEnumerator ProcessPeopleRoutine()
     {
-        // 仮の設定（例：丸→四角の順に押す必要がある）
-        return new List<StampType> { StampType.Circle, StampType.Square };
+        foreach (var person in personDatas)
+        {
+            // 入場セリフ
+            uiManager.ShowDialogue(person.enterLine);
+            yield return new WaitForSeconds(1.2f);
+            uiManager.ClearDialogue();
+
+            // 関連書類を順に処理
+            foreach (int docIndex in person.relatedDocumentIndices)
+            {
+                LoadDocument(person, docIndex);
+
+                // 書類完了待ち（InnerZoneDetector2Dが通知するまで）
+                yield return new WaitUntil(() => currentDocument == null);
+
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // 退場セリフ
+            uiManager.ShowDialogue(person.exitLine);
+            yield return new WaitForSeconds(1.2f);
+            uiManager.ClearDialogue();
+            uiManager.NextPerson();
+        }
+
+        // スコア平均を算出
+        float averageScore = totalDocuments > 0 ? totalScore / totalDocuments : 0f;
+        PlayerPrefs.SetFloat("ResultScore", averageScore);
+
+        // ステージ結果へ
+        SceneManager.LoadScene("ResultScene");
     }
 
-    public void AddScore(int score)
+    /// <summary>
+    /// 書類の生成（前の書類を削除して新規ロード）
+    /// </summary>
+    private void LoadDocument(PersonData person, int docIndex)
     {
-        totalScore += score;
-        Debug.Log($"📊 現在スコア: {totalScore}");
+        // 既存ドキュメント破棄＆スタンプ削除
+        if (currentDocument != null)
+            Destroy(currentDocument);
+        foreach (GameObject g in GameObject.FindGameObjectsWithTag("stamp"))
+            Destroy(g);
+
+        // 書類角度を決定
+        float angle = (person.docAngleMode == "Random")
+            ? Random.Range(person.docAngleMin, person.docAngleMax)
+            : person.docAngleMin;
+
+        currentDocument = Instantiate(documentPrefabs[docIndex],
+            spawnPoint.position, Quaternion.Euler(0, 0, angle));
+
+        // 必要スタンプ種類を解析してUI更新
+        List<StampType> requiredStamps = GetRequiredStampsFromPattern(person.stampPattern);
+        uiManager.UpdateStampPattern(person.stampPattern);
+        uiManager.UpdateRemainingStamps(requiredStamps.Count);
+
+        // InnerZoneにDocumentManagerを登録（スコア通知用）
+        InnerZoneDetector2D[] zones = currentDocument.GetComponentsInChildren<InnerZoneDetector2D>();
+        foreach (var zone in zones)
+            zone.SetManager(this, requiredStamps);
     }
 
-    public void ResetScore()
+    /// <summary>
+    /// InnerZoneDetector2D から呼ばれる：書類完了
+    /// </summary>
+    public void OnDocumentCompleted(float documentScore)
     {
-        totalScore = 0;
-    }
+        totalScore += documentScore;
+        totalDocuments++;
 
-    public void LoadNextDocument()
-    {
-        // 現在のドキュメント削除＆関連人物削除
         if (currentDocument != null)
         {
             Destroy(currentDocument);
-            ClearPeople();
+            currentDocument = null;
         }
-
-        // 書類切り替え時に全スタンプ削除
-        GameObject[] stamps = GameObject.FindGameObjectsWithTag("stamp");
-        foreach (GameObject stamp in stamps)
-            Destroy(stamp);
-
-        // 新規ドキュメント生成
-        currentDocument = Instantiate(documentPrefabs[currentDocumentIndex], spawnPoint.position, Quaternion.identity);
-
-        // スタンプゾーン取得＆セット
-        InnerZoneDetector2D[] innerZones = currentDocument.GetComponentsInChildren<InnerZoneDetector2D>();
-        stampController.SetStampZones(innerZones, currentDocument.transform);
-
-        // 関連人物をスポーン
-        SpawnRelatedPeople(currentDocumentIndex);
-
-        // 書類評価初期化
-        ResetScore();
-
-        // インデックス更新（ループ）
-        currentDocumentIndex = (currentDocumentIndex + 1) % documentPrefabs.Length;
     }
 
-    private void SpawnRelatedPeople(int docIndex)
+    /// <summary>
+    /// CSVパターン（例："Circle:1|Square:1"）を分解してStampTypeリストを返す
+    /// </summary>
+    public List<StampType> GetRequiredStampsFromPattern(string pattern)
     {
-        ClearPeople();
+        List<StampType> result = new List<StampType>();
+        if (string.IsNullOrEmpty(pattern)) return result;
 
-        foreach (var data in personDatas)
+        string[] parts = pattern.Split('|');
+        foreach (string p in parts)
         {
-            if (System.Array.Exists(data.relatedDocumentIndices, index => index == docIndex))
-            {
-                GameObject go = Instantiate(personPrefab, personSpawnPoint.position, Quaternion.identity);
-                PersonController person = go.GetComponent<PersonController>();
-                person.Init(data, OnPersonAngry);
-                activePeople.Add(person);
+            string[] typeCount = p.Split(':');
+            if (typeCount.Length != 2) continue;
 
-                if (!personScores.ContainsKey(data))
-                    personScores[data] = new List<int>();
+            if (System.Enum.TryParse(typeCount[0], out StampType type))
+            {
+                if (int.TryParse(typeCount[1], out int count))
+                {
+                    for (int i = 0; i < count; i++)
+                        result.Add(type);
+                }
             }
         }
-    }
-
-    private void ClearPeople()
-    {
-        foreach (var person in activePeople)
-        {
-            if (person != null)
-                Destroy(person.gameObject);
-        }
-        activePeople.Clear();
-    }
-
-    private void OnPersonAngry()
-    {
-        Debug.Log("😡 人物が怒った！ゲームオーバー処理へ");
-        EvaluateAllPersons(); // ゲームオーバー時も評価して終了扱い
-    }
-
-    // 各書類完了時に呼ばれる
-    public void OnDocumentCompleted()
-    {
-        // 関連人物にスコア登録
-        foreach (var person in activePeople)
-        {
-            PersonData data = GetPersonDataByController(person);
-            if (data != null)
-                personScores[data].Add(totalScore);
-        }
-
-        Debug.Log($"✅ 書類完了 スコア: {totalScore}");
-        CheckIfAllDocumentsDone();
-    }
-
-    private PersonData GetPersonDataByController(PersonController controller)
-    {
-        foreach (var data in personDatas)
-        {
-            if (controller.name.Contains(data.name))
-                return data;
-        }
-        return null;
-    }
-
-    private void CheckIfAllDocumentsDone()
-    {
-        // 全ドキュメント処理済みか？
-        if (currentDocumentIndex == 0)
-        {
-            EvaluateAllPersons();
-        }
-        else
-        {
-            LoadNextDocument();
-        }
-    }
-
-    private void EvaluateAllPersons()
-    {
-        float totalAverage = 0f;
-        int personCount = 0;
-
-        foreach (var kv in personScores)
-        {
-            float avg = 0f;
-            if (kv.Value.Count > 0)
-            {
-                foreach (int s in kv.Value)
-                    avg += s;
-                avg /= kv.Value.Count;
-            }
-
-            bool passed = avg >= 70f;
-            Debug.Log($"🧍 {kv.Key.name}: 平均 {avg:F1}点 → {(passed ? "可" : "不可")}");
-            totalAverage += avg;
-            personCount++;
-        }
-
-        if (personCount > 0)
-        {
-            float stageAvg = totalAverage / personCount;
-            if (stageAvg >= 80f)
-            {
-                Debug.Log($"🎉 ステージクリア！（平均 {stageAvg:F1}点）→ ステージセレクトへ");
-                // TODO: SceneManager.LoadScene("StageSelect");
-            }
-            else
-            {
-                Debug.Log($"😢 ステージ失敗（平均 {stageAvg:F1}点）→ タイトルへ戻る");
-                // TODO: SceneManager.LoadScene("Title");
-            }
-        }
+        return result;
     }
 }

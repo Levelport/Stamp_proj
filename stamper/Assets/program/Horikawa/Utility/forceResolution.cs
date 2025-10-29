@@ -2,8 +2,8 @@ using UnityEngine;
 
 public class forceResolution : MonoBehaviour
 {
-    public int width = 720;
-    public int height = 1280;
+    public int width = 310;
+    public int height = 552;
     public bool fullscreen = false;
 
     void Start()

@@ -1,0 +1,4 @@
+﻿Name,BaseSprite,Documents,AngerTime,EnterLine,ExitLine,StampPattern,DocAngleMode,DocAngleMin,DocAngleMax
+Worker01,Worker01,0,10,"お願いします","ありがとうございました","Circle:1",Random,-10,10
+Worker01,Worker01,1,10,"次の書類です","お疲れ様でした","Square:1",Fixed,0,0
+Worker01,Worker01,2,10,"最後です","これで全部です","Circle:1",Random,-20,20

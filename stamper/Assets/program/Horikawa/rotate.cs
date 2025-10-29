@@ -1,268 +1,186 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using System.Collections;
-using System.Collections.Generic;
 
-public class Draggable2DObjectController : MonoBehaviour
+/// <summary>
+/// 印鑑操作：長押し1回目で回転、2回目で移動、3回目で押印（決定）
+/// 単タップで丸⇔四角のハンコ切替
+/// </summary>
+public class StampOperatorController : MonoBehaviour
 {
-    [Header("Handlers & Origins")]
-    [SerializeField] private Transform circleHandler;
-    [SerializeField] private Transform squareHandler;
-    [SerializeField] private Transform circleOrigin;
-    [SerializeField] private Transform squareOrigin;
+    [Header("操作対象 Stamp（印鑑本体）")]
+    [SerializeField] private Transform stampRound;   // 丸ハンコ操作物
+    [SerializeField] private Transform stampSquare;  // 四角ハンコ操作物
 
-    [Header("Stamp Prefabs")]
-    [SerializeField] private GameObject circleStampPrefab;
+    [Header("印影プレハブ")]
+    [SerializeField] private GameObject roundStampPrefab;
     [SerializeField] private GameObject squareStampPrefab;
 
-    [Header("Visual Feedback")]
-    [SerializeField] private CanvasGroup circleCanvasGroup;
-    [SerializeField] private CanvasGroup squareCanvasGroup;
+    [Header("初期位置（待機ポジション）")]
+    [SerializeField] private Transform stampPos1;
+    [SerializeField] private Transform stampPos2;
 
-    [Header("System")]
-    [SerializeField] private DocumentManager documentManager;
+    [Header("設定値")]
+    [SerializeField] private float rotationSpeed = 200f;
+    [SerializeField] private float holdThreshold = 0.6f;
+    [SerializeField] private float zOffset = 1.0f;
 
-    private InnerZoneDetector2D[] innerZones;
-    private Transform outerZoneTransform;
-    private bool isDragging = false;
-    private float rotationZ = 0f;
-    private int longPressCount = 0;
-    private float pressTime = 0f;
-    private float longPressDuration = 0.5f;
-    private bool isPressing = false;
-    private Vector2 previousInputPosition;
-    private Camera mainCamera;
+    private enum StampMode { Idle, Rotate, Move, Confirm }
+    private StampMode currentMode = StampMode.Idle;
 
-    private List<StampType> requiredStamps = new List<StampType>();
-    private int currentStampIndex = 0;
-    private StampType currentStampType;
-
-    private Vector3 circleOriginalScale;
-    private Vector3 squareOriginalScale;
-
-    public void SetStampZones(InnerZoneDetector2D[] zones, Transform outer)
-    {
-        innerZones = zones;
-        outerZoneTransform = outer;
-        currentStampIndex = 0;
-
-        requiredStamps = documentManager.GetRequiredStamps();
-        if (requiredStamps.Count > 0)
-        {
-            currentStampType = requiredStamps[0];
-            SetActiveHandler();
-        }
-
-        ResetHandlerPositions();
-    }
+    private Transform activeStamp;
+    private GameObject activePrefab;
+    private Camera mainCam;
+    private Vector3 dragStart;
+    private float currentRotation = 0f;
+    private bool inputPressedLastFrame = false;
+    private float holdTimer = 0f;
+    private int holdCount = 0; // 1=回転, 2=移動, 3=押印
 
     void Start()
     {
-        mainCamera = Camera.main;
-        circleOriginalScale = circleHandler.localScale;
-        squareOriginalScale = squareHandler.localScale;
-        ResetHandlerPositions();
+        mainCam = Camera.main;
+        SetActiveStamp(StampType.Circle);
     }
 
     void Update()
     {
-        Vector2 inputPosition = Vector2.zero;
-        bool inputStarted = false;
-        bool inputEnded = false;
-        bool inputHeld = false;
-
 #if UNITY_EDITOR || UNITY_STANDALONE
-        var mouse = Mouse.current;
-        if (mouse != null)
-        {
-            inputPosition = mouse.position.ReadValue();
-            inputStarted = mouse.leftButton.wasPressedThisFrame;
-            inputEnded = mouse.leftButton.wasReleasedThisFrame;
-            inputHeld = mouse.leftButton.isPressed;
-        }
-#elif UNITY_IOS || UNITY_ANDROID
-        if (Input.touchCount > 0)
-        {
-            Touch touch = Input.GetTouch(0);
-            inputPosition = touch.position;
-            switch (touch.phase)
-            {
-                case TouchPhase.Began: inputStarted = true; break;
-                case TouchPhase.Ended:
-                case TouchPhase.Canceled: inputEnded = true; break;
-                default: inputHeld = true; break;
-            }
-        }
+        HandleMouseInput();
+#elif UNITY_ANDROID || UNITY_IOS
+        HandleTouchInput();
 #endif
-
-        Transform handler = GetCurrentHandler();
-        Vector3 originalScale = currentStampType == StampType.Circle ? circleOriginalScale : squareOriginalScale;
-
-        if (inputStarted)
-        {
-            Vector3 worldPos = mainCamera.ScreenToWorldPoint(inputPosition);
-            worldPos.z = 0f;
-            Collider2D col = Physics2D.OverlapPoint(worldPos);
-            if (col != null && col.transform == handler)
-            {
-                isPressing = true;
-                pressTime = 0f;
-                previousInputPosition = inputPosition;
-            }
-        }
-
-        if (inputEnded)
-        {
-            isPressing = false;
-            isDragging = false;
-            handler.localScale = originalScale;
-
-            longPressCount++;
-
-            if (longPressCount >= 3)
-            {
-                longPressCount = 0;
-                TryPlaceStamp();
-                StartCoroutine(DelayedResetCurrentHandler(0.3f));
-            }
-        }
-
-        if (isPressing && !isDragging && inputHeld)
-        {
-            pressTime += Time.deltaTime;
-            if (pressTime >= longPressDuration)
-                isDragging = true;
-        }
-
-        if (isDragging && inputHeld)
-        {
-            Vector2 delta = inputPosition - previousInputPosition;
-
-            switch (longPressCount)
-            {
-                case 0:
-                    rotationZ -= delta.x * 0.2f;
-                    handler.rotation = Quaternion.Euler(0f, 0f, rotationZ);
-                    handler.localScale = originalScale * 1.3f;
-                    break;
-
-                case 1:
-                    Vector3 worldPos = mainCamera.ScreenToWorldPoint(inputPosition);
-                    worldPos.z = -1f;
-                    handler.position = worldPos;
-                    handler.localScale = originalScale * 1.3f;
-                    break;
-            }
-
-            previousInputPosition = inputPosition;
-        }
     }
 
-    private void TryPlaceStamp()
+    // 🖱️ PC操作
+    private void HandleMouseInput()
     {
-        if (currentStampIndex >= requiredStamps.Count)
-            return;
+        Vector2 pos = Mouse.current.position.ReadValue();
+        bool pressed = Mouse.current.leftButton.isPressed;
+        ProcessInput(pos, pressed);
+    }
 
-        Transform handler = GetCurrentHandler();
-        Vector3 pos = handler.position;
-        Quaternion rot = handler.rotation;
+    // 🤚 モバイル操作
+    private void HandleTouchInput()
+    {
+        if (Touchscreen.current == null) return;
 
-        float outerAngle = outerZoneTransform.eulerAngles.z;
-        float stampAngle = rot.eulerAngles.z;
-        float angleDiff = Mathf.Abs(Mathf.DeltaAngle(outerAngle, stampAngle));
+        var touch = Touchscreen.current.primaryTouch;
+        Vector2 pos = touch.position.ReadValue();
+        bool pressed = touch.press.isPressed;
 
-        bool validStamp = false;
-        int score = 0;
+        ProcessInput(pos, pressed);
+    }
 
-        foreach (var zone in innerZones)
+    // 共通入力処理
+    private void ProcessInput(Vector2 screenPos, bool pressed)
+    {
+        Vector3 worldPos = mainCam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, zOffset));
+        worldPos.z = zOffset;
+
+        if (pressed)
         {
-            Collider2D col = zone.GetComponent<Collider2D>();
-            if (col != null && col.OverlapPoint(pos))
+            holdTimer += Time.deltaTime;
+
+            if (!inputPressedLastFrame)
             {
-                score = zone.RegisterStamp(angleDiff, currentStampType);
-                documentManager.AddScore(score);
+                dragStart = worldPos;
+            }
 
-                Instantiate(GetStampPrefab(), pos, rot).tag = "stamp";
+            // 長押し判定
+            if (holdTimer >= holdThreshold && !inputPressedLastFrame)
+            {
+                holdCount++;
+                holdTimer = 0f;
 
-                if (score >= 70)
+                switch (holdCount)
                 {
-                    Debug.Log($"✅ スタンプ成功: {currentStampType}（スコア: {score}）");
-                    currentStampIndex++;
-                    if (currentStampIndex >= requiredStamps.Count)
-                    {
-                        documentManager.OnDocumentCompleted(); // ★ 書類完了を通知
-                        StartCoroutine(DelayedLoadNextDocument(1.5f));
-                    }
+                    case 1:
+                        currentMode = StampMode.Rotate;
+                        Debug.Log("🌀 回転モード開始");
+                        break;
+                    case 2:
+                        currentMode = StampMode.Move;
+                        Debug.Log("📦 移動モード開始");
+                        break;
+                    case 3:
+                        currentMode = StampMode.Confirm;
+                        Debug.Log("✅ 押印確定");
+                        TryStamp();
+                        ResetToOrigin();
+                        holdCount = 0;
+                        currentMode = StampMode.Idle;
+                        break;
                 }
-                else
-                {
-                    Debug.Log($"⚠ スタンプ失敗（スコア: {score}）");
-                }
+            }
 
-                validStamp = true;
-                break;
+            if (currentMode == StampMode.Rotate)
+            {
+                Vector2 delta = screenPos - new Vector2(dragStart.x, dragStart.y);
+                float rotDelta = delta.x * rotationSpeed * Time.deltaTime;
+                currentRotation += rotDelta;
+                activeStamp.rotation = Quaternion.Euler(0, 0, currentRotation);
+            }
+
+            if (currentMode == StampMode.Move)
+            {
+                activeStamp.position = Vector3.Lerp(activeStamp.position, worldPos, 0.5f);
             }
         }
-
-        if (!validStamp)
+        else
         {
-            Vector3 stampPos = pos;
-            stampPos.z = -0.1f;
-            Instantiate(GetStampPrefab(), stampPos, rot).tag = "stamp";
-            Debug.Log("❌ 内部ゾーン外：スコアなし（カウント外）");
+            if (inputPressedLastFrame && holdTimer < holdThreshold)
+            {
+                // 単タップ → ハンコ切替
+                ToggleStamp();
+            }
+
+            holdTimer = 0;
         }
+
+        inputPressedLastFrame = pressed;
     }
 
-    private IEnumerator DelayedLoadNextDocument(float delay)
+    private void TryStamp()
     {
-        yield return new WaitForSeconds(delay);
-        GameObject[] stamps = GameObject.FindGameObjectsWithTag("stamp");
-        foreach (GameObject stamp in stamps)
-            Destroy(stamp);
+        if (activePrefab == null) return;
 
-        documentManager.LoadNextDocument();
+        Vector3 pos = activeStamp.position;
+        pos.z = 0f; // 書類上（Z=0）に押す
+        Instantiate(activePrefab, pos, activeStamp.rotation).tag = "stamp";
     }
 
-    private Transform GetCurrentHandler() =>
-        currentStampType == StampType.Circle ? circleHandler : squareHandler;
-
-    private Transform GetCurrentOrigin() =>
-        currentStampType == StampType.Circle ? circleOrigin : squareOrigin;
-
-    private GameObject GetStampPrefab() =>
-        currentStampType == StampType.Circle ? circleStampPrefab : squareStampPrefab;
-
-    private void SetActiveHandler()
+    private void ResetToOrigin()
     {
-        bool isCircle = currentStampType == StampType.Circle;
-        circleCanvasGroup.alpha = isCircle ? 1f : 0.4f;
-        circleCanvasGroup.interactable = isCircle;
-        squareCanvasGroup.alpha = isCircle ? 0.4f : 1f;
-        squareCanvasGroup.interactable = !isCircle;
+        Transform targetPos = (activeStamp == stampRound) ? stampPos1 : stampPos2;
+        activeStamp.position = targetPos.position;
+        activeStamp.rotation = Quaternion.identity;
+        currentRotation = 0f;
     }
 
-    private void ResetHandlerPositions()
+    private void SetActiveStamp(StampType type)
     {
-        circleHandler.position = circleOrigin.position;
-        circleHandler.rotation = circleOrigin.rotation;
-        squareHandler.position = squareOrigin.position;
-        squareHandler.rotation = squareOrigin.rotation;
-    }
-
-    private IEnumerator DelayedResetCurrentHandler(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-
-        Transform handler = GetCurrentHandler();
-        Transform origin = GetCurrentOrigin();
-
-        handler.position = origin.position;
-        handler.rotation = origin.rotation;
-
-        if (currentStampIndex < requiredStamps.Count)
+        if (type == StampType.Circle)
         {
-            currentStampType = requiredStamps[currentStampIndex];
-            SetActiveHandler();
+            stampRound.gameObject.SetActive(true);
+            stampSquare.gameObject.SetActive(false);
+            activeStamp = stampRound;
+            activePrefab = roundStampPrefab;
         }
+        else
+        {
+            stampRound.gameObject.SetActive(false);
+            stampSquare.gameObject.SetActive(true);
+            activeStamp = stampSquare;
+            activePrefab = squareStampPrefab;
+        }
+        ResetToOrigin();
+    }
+
+    private void ToggleStamp()
+    {
+        if (activeStamp == stampRound)
+            SetActiveStamp(StampType.Square);
+        else
+            SetActiveStamp(StampType.Circle);
     }
 }

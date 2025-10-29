@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class UIManager : MonoBehaviour
+public class HelpOption : MonoBehaviour
 {
     [Header("Main Buttons")]
     public Button descriptionButton;
