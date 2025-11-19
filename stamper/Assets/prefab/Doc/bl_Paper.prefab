@@ -229,3 +229,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6bce741909f664163bcacbe59e587491, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::InnerZoneDetector2D
+  zoneID: BL
+  requiredType: 0
+  isStamped: 0

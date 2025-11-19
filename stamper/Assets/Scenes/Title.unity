@@ -633,6 +633,7 @@ GameObject:
   - component: {fileID: 817259343}
   - component: {fileID: 817259342}
   - component: {fileID: 817259345}
+  - component: {fileID: 817259346}
   m_Layer: 0
   m_Name: Util
   m_TagString: Untagged
@@ -665,7 +666,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::forceResolution
   width: 720
-  height: 1280
+  height: 1612
   fullscreen: 0
 --- !u!4 &817259344
 Transform:
@@ -700,6 +701,18 @@ MonoBehaviour:
   settingsWindow: {fileID: 1027618279}
   descriptionCloseButton: {fileID: 1914885022}
   settingsCloseButton: {fileID: 1914885022}
+--- !u!114 &817259346
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 817259341}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2847e91ba10d14303bbdf17a232b1da7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FPSLimiter
 --- !u!1 &1027618279
 GameObject:
   m_ObjectHideFlags: 0

@@ -104,8 +104,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b7e0db6d81d67431ea2ab9d229a0cf05, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PersonController
-  personRenderer: {fileID: 8478495678354107297}
-  angerOverlayRenderer: {fileID: 43263570423679358}
+  bodyRenderer: {fileID: 8478495678354107297}
+  angerBar: {fileID: 0}
 --- !u!1 &3548260974358042753
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,55 +1,102 @@
 using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
 
 public class PersonController : MonoBehaviour
 {
-    [Header("Sprite Renderers")]
-    [SerializeField] private SpriteRenderer personRenderer;        // 通常の人物スプライト
-    [SerializeField] private SpriteRenderer angerOverlayRenderer;  // 赤くなるオーバーレイ
+    [Header("見た目")]
+    [SerializeField] private SpriteRenderer bodyRenderer;
 
-    private float angerTime = 10f;  // 怒りMAXまでの時間（秒）
-    private float timer = 0f;
-    private bool isActive = false;
+    [Header("怒りメーター")]
+    [SerializeField] private Image angerBar;  // 下から赤くする Image
+    private float angerTime;
+    private float angerTimer = 0f;
+    private bool angerActive = false;
 
-    private System.Action onAngryCallback;
+    private PersonData myData;
 
-    public void Init(PersonData data, System.Action onAngry)
+    public void Setup(PersonData data)
     {
-        // スプライトセット（同じ画像を2つに使う）
-        personRenderer.sprite = data.baseSprite;
-        angerOverlayRenderer.sprite = data.baseSprite;
-
+        myData = data;
         angerTime = data.angerTime;
-        timer = 0f;
-        isActive = true;
-        onAngryCallback = onAngry;
 
-        // 赤いオーバーレイ初期設定（透明度＋スケールY=0で下から消した状態）
-        angerOverlayRenderer.color = new Color(1f, 0f, 0f, 0.5f);
-        angerOverlayRenderer.transform.localScale = new Vector3(1f, 0f, 1f);
-        angerOverlayRenderer.transform.localPosition = new Vector3(0f, -0.5f, 0f);
+        // Sprite 読み込み
+        Sprite face = Resources.Load<Sprite>(data.baseSpriteName);
+        if (face != null)
+            bodyRenderer.sprite = face;
+
+        ResetAnger();
+        StartAnger();
     }
 
-    void Update()
+    // --------------------------------------------------------
+    // 怒りメーター制御
+    // --------------------------------------------------------
+
+    public void StartAnger()
     {
-        if (!isActive) return;
+        angerTimer = 0f;
+        angerActive = true;
+        UpdateBar();
+    }
 
-        timer += Time.deltaTime;
-        float ratio = Mathf.Clamp01(timer / angerTime);
+    public void StopAnger()
+    {
+        angerActive = false;
+    }
 
-        // 赤オーバーレイを下から伸ばす演出
-        angerOverlayRenderer.transform.localScale = new Vector3(1f, ratio, 1f);
-        angerOverlayRenderer.transform.localPosition = new Vector3(0f, -(1f - ratio) / 2f, 0f);
+    private void Update()
+    {
+        if (!angerActive) return;
 
-        if (ratio >= 1f)
+        angerTimer += Time.deltaTime;
+
+        UpdateBar();
+
+        if (angerTimer >= angerTime)
         {
-            isActive = false;
-            onAngryCallback?.Invoke();
+            OnAngerMax();
         }
     }
 
-    public void Resolve()
+    private void UpdateBar()
     {
-        isActive = false;
-        Destroy(gameObject, 0.5f); // 0.5秒後に消す（演出余地）
+        if (angerBar == null) return;
+
+        float t = angerTimer / angerTime;
+        t = Mathf.Clamp01(t);
+
+        angerBar.fillAmount = t;     // 下から赤く埋まる演出
     }
+
+    private void ResetAnger()
+    {
+        angerTimer = 0f;
+        angerActive = false;
+        UpdateBar();
+    }
+
+    // 怒り最大時（強制退出などに使える）
+    private void OnAngerMax()
+    {
+        angerActive = false;
+        Debug.Log("怒りMAX! 強制退出などの処理！");
+        // 今後仕様次第で追加
+    }
+
+    // --------------------------------------------------------
+    // 書類完了時に DocumentManager から呼ばれる
+    // --------------------------------------------------------
+    public void OnDocumentCompleted()
+    {
+        // 書類ごとに怒りをリセットする
+        ResetAnger();
+        StartAnger();
+    }
+
+    // --------------------------------------------------------
+    // UI からセリフ呼び出し用
+    // --------------------------------------------------------
+    public string GetEnterLine() => myData.enterLine;
+    public string GetExitLine() => myData.exitLine;
 }

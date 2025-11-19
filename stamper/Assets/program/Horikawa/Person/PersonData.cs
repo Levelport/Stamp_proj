@@ -1,21 +1,22 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "NewPersonData", menuName = "Game/PersonData")]
-public class PersonData : ScriptableObject
+[System.Serializable]
+public class PersonData
 {
-    public Sprite baseSprite;
-    public int[] relatedDocumentIndices;
-    public float angerTime = 10f;
+    public string name;
+    public string baseSpriteName;
 
-    [Header("セリフ")]
+    public int[] relatedDocumentIndices;  // 0|1|2 のような形式
+
+    public float angerTime;
+
     public string enterLine;
     public string exitLine;
 
-    [Header("スタンプ構成 (Circle:1|Square:2)")]
+    // TR:Square&BR:Circle|CC:Circle のような形式
     public string stampPattern;
 
-    [Header("書類角度設定")]
-    public string docAngleMode; // "Fixed" or "Random"
+    public string docAngleMode;
     public float docAngleMin;
     public float docAngleMax;
 }
