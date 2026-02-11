@@ -27,7 +27,7 @@ Transform:
   m_GameObject: {fileID: 2750965142155452875}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.4, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -59,7 +59,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -81,7 +81,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 2593131733092139209, guid: dc813736baa7440529a5b01c47eb55d7, type: 3}
+  m_Sprite: {fileID: -244772689634336931, guid: d7cd1c02fa5481f43b6d48381ac282f8, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -104,8 +104,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b7e0db6d81d67431ea2ab9d229a0cf05, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PersonController
-  bodyRenderer: {fileID: 8478495678354107297}
-  angerBar: {fileID: 0}
+  faceRenderer: {fileID: 8478495678354107297}
+  angerRenderer: {fileID: 43263570423679358}
 --- !u!1 &3548260974358042753
 GameObject:
   m_ObjectHideFlags: 0
@@ -132,7 +132,7 @@ Transform:
   m_GameObject: {fileID: 3548260974358042753}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: -0.1}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -163,7 +163,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 2100000, guid: 3638b2b9e4e62aa4b810f3e720fc5ab0, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -185,8 +185,8 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 2593131733092139209, guid: dc813736baa7440529a5b01c47eb55d7, type: 3}
-  m_Color: {r: 1, g: 0.5479523, b: 0.48584908, a: 0}
+  m_Sprite: {fileID: -244772689634336931, guid: d7cd1c02fa5481f43b6d48381ac282f8, type: 3}
+  m_Color: {r: 0.990566, g: 0.036894597, b: 0, a: 0}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0

@@ -1,138 +1,144 @@
 using UnityEngine;
-using TMPro;
 using UnityEngine.UI;
+using TMPro;
 
-/// <summary>
-/// UI全体を統括するクラス。
-/// DocumentManager, StampOperatorController, PersonManager と連携して情報表示を行う。
-/// </summary>
+
 public class UIManager : MonoBehaviour
 {
-    [Header("人物進行関連")]
-    [SerializeField] private TextMeshProUGUI personCountText;    // 例: "人物 1 / 5"
-    [SerializeField] private Slider personProgressBar;           // 残り人数の進捗バー（任意）
+    [Header("Text UI")]
+    public TMP_Text dialogueText;
+    public TMP_Text remainingPeopleText;
+    public Image background;
 
-    [Header("セリフ関連")]
-    [SerializeField] private TextMeshProUGUI dialogueText;       // セリフ（登場／退場）
+    public TMP_Text currentModeText;
+    public TMP_Text RankText;
+    public TMP_Text currentStampText;
+    public TMP_Text playerRoleText;
 
-    [Header("ハンコ関連")]
-    [SerializeField] private TextMeshProUGUI currentStampText;   // 現在のハンコ（丸印・角印）
-    [SerializeField] private TextMeshProUGUI operationModeText;  // 現在の操作モード（回転・移動・決定・待機）
-    [SerializeField] private TextMeshProUGUI requiredStampsText; // 書類の必要ハンコ数
 
-    [Header("怒りゲージ（任意）")]
-    [SerializeField] private Slider angerBar;                    // PersonManagerで更新する（オプション）
 
-    // 内部情報
-    private int totalPersons = 0;
-    private int currentPersonIndex = 0;
+    public Slider BGMSlider;
+    public Slider SESlider;
 
-    private string currentStamp = "丸印";
-    private string currentMode = "待機";
-    private int currentRemaining = 0;
+    private int totalPeople;
+    private int currentIndex = 0;
 
-    // ===============================================================
-    // 初期化処理
-    // ===============================================================
-    public void Initialize(int personCount)
+    public void Initialize(int peopleCount,int stagenum)
     {
-        totalPersons = personCount;
-        currentPersonIndex = 0;
+        totalPeople = peopleCount;
+        currentIndex = 0;
+        UpdateRemainingPeople();
+        ClearDialogue();
+        SetRank(stagenum);
 
-        UpdatePersonCountUI();
+
+        BGMSlider.value=SoundManager_H.Instance.bgmVolume;
+        SESlider.value=SoundManager_H.Instance.seVolume;
+
+        BGMSlider.onValueChanged.AddListener(OnBGMChanged);
+        SESlider.onValueChanged.AddListener(OnSEChanged);
+
+
+        if (currentStampText != null)
+            currentStampText.text = "ハンコ：なし";
+
+        if (currentModeText != null)
+            currentModeText.text = "モード：なし";
     }
 
-    // ===============================================================
-    // 人物進行UI
-    // ===============================================================
-    public void UpdatePersonInfo(int index)
+    public void OnBGMChanged(float value)
     {
-        currentPersonIndex = index;
-        UpdatePersonCountUI();
+        SoundManager_H.Instance.SetBGMVolume(value);
     }
 
+    public void OnSEChanged(float value)
+    {
+        SoundManager_H.Instance.SetSEVolume(value); 
+    }
+    // ---------------------
+    // 人数表示
+    // ---------------------
     public void NextPerson()
     {
-        currentPersonIndex++;
-        UpdatePersonCountUI();
+        currentIndex++;
+        UpdateRemainingPeople();
     }
 
-    private void UpdatePersonCountUI()
+    private void UpdateRemainingPeople()
     {
-        if (personCountText != null)
-            personCountText.text = $"人物 {currentPersonIndex + 1} / {totalPersons}";
-
-        if (personProgressBar != null)
-            personProgressBar.value = (float)(currentPersonIndex + 1) / totalPersons;
+        if (remainingPeopleText != null)
+            remainingPeopleText.text = $"残り人数：{(totalPeople - currentIndex)}人";
     }
 
-    // ===============================================================
-    // セリフ表示
-    // ===============================================================
-    public void ShowDialogue(string message)
+    // ---------------------
+    // Dialogue
+    // ---------------------
+    public void ShowDialogue(string line)
     {
         if (dialogueText != null)
-            dialogueText.text = message;
+            dialogueText.text = line;
+            background.enabled=true;
     }
 
     public void ClearDialogue()
     {
         if (dialogueText != null)
             dialogueText.text = "";
+            background.enabled=false;
     }
 
-    // ===============================================================
-    // ハンコ関連UI
-    // ===============================================================
-    public void UpdateCurrentStamp(StampType type)
+    // ---------------------
+    // StampOperatorController が呼ぶ
+    // ---------------------
+    public void UpdateCurrentStamp(StampType? type)
     {
-        string jp = (type == StampType.Circle) ? "丸印" : "角印";
-        currentStamp = jp;
+        if (currentStampText == null) return;
 
-        if (currentStampText != null)
-            currentStampText.text = $"現在のハンコ：{jp}";
+        if (type == null)
+            currentStampText.text = "ハンコ：なし";
+        else
+            currentStampText.text = $"操作ハンコ：{type.ToString()}";
     }
 
     public void UpdateOperationMode(string mode)
     {
-        currentMode = mode;
-        if (operationModeText != null)
-            operationModeText.text = $"操作モード：{mode}";
+        if (currentModeText != null)
+            currentModeText.text = $"モード：\n{mode}";
     }
 
-    public void UpdateRequiredStamps(int remaining)
+    public void SetRank(int stageNum)
     {
-        currentRemaining = Mathf.Max(remaining, 0);
-        if (requiredStampsText != null)
-            requiredStampsText.text = $"残りハンコ数：{currentRemaining}";
+        string ranks="null";
+        switch  (stageNum)
+        {
+        case 1:
+            ranks="係長";
+            RankText.text=ranks;
+        break;
+        case 2:
+            ranks="課長";
+            RankText.text=ranks;
+        break;
+        case 3:
+            ranks="部長";
+            RankText.text=ranks;
+        break;
+        case 4:
+            ranks="常務";
+            RankText.text=ranks;
+        break;
+        case 5:
+        case 6:
+            ranks="副社長";
+            RankText.text=ranks;
+        break;
+        default:
+            ranks="社長";
+            RankText.text=ranks;
+        break;
+        }
+
+
     }
 
-    // ===============================================================
-    // 怒りゲージ更新（PersonManager から呼ばれる）
-    // ===============================================================
-    public void UpdateAngerBar(float normalizedValue)
-    {
-        if (angerBar != null)
-            angerBar.value = Mathf.Clamp01(normalizedValue);
-    }
-
-    // ===============================================================
-    // 総合UIリフレッシュ（デバッグ・再描画用）
-    // ===============================================================
-    public void RefreshAll()
-    {
-        UpdatePersonCountUI();
-
-        if (dialogueText != null)
-            dialogueText.text = dialogueText.text;
-
-        if (currentStampText != null)
-            currentStampText.text = $"現在のハンコ：{currentStamp}";
-
-        if (operationModeText != null)
-            operationModeText.text = $"操作モード：{currentMode}";
-
-        if (requiredStampsText != null)
-            requiredStampsText.text = $"残りハンコ数：{currentRemaining}";
-    }
 }

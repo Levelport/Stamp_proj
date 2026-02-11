@@ -1,0 +1,10 @@
+﻿Name,BaseSprite,Documents,AngerTime,EnterLine,ExitLine,StampPattern,DocAngleMode,DocAngleMin,DocAngleMax
+Worker0,shainn0,14,10,書類提出に来ました,ありがとうございました,CR:Circle,Fixed,0,0
+Worker1,shainn1,12,10,申請の件です,確認感謝します,BR:Circle,Fixed,0,0
+Worker2,shainn2,12,10,提出書類です,確認ありがとうございました,BR:Circle,Fixed,-15,0
+Worker3,shainn3,11,10,確認をお願いします,助かります、失礼します,BC:Circle,Fixed,0,0
+Worker4,shainn4,13,10,こちら書類です,助かりました,TR:Circle,Fixed,0,0
+Worker5,shainn5,14,10,丸印をお願いします,失礼します,CR:Circle,Fixed,30,0
+Worker6,shainn6,10,10,申請書をお持ちしました,ご対応ありがとうございます,BL:Circle,Fixed,-15,0
+Worker7,shainn7,11,10,書類を持ってきました,では戻ります,BC:Circle,Fixed,45,0
+Worker8,shainn17,13,10,この書類でお願いします,問題なさそうですね,TR:Circle,Fixed,-45,0

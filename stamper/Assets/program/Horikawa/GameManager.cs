@@ -2,76 +2,102 @@ using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
-    [Header("Managers")]
+    [Header("Managers (Inspector でセット)")]
     [SerializeField] private PersonManager personManager;
     [SerializeField] private DocumentManager documentManager;
     [SerializeField] private UIManager uiManager;
 
+
+    // CSVから読み込まれたこのステージでの全員分
     private PersonData[] personDatas;
-    private int currentPersonIndex = 0;
-    private PersonController currentPerson;
 
-    void Start()
+    private void Start()
     {
+
         LoadStageData();
-        StartFirstPerson();
+        SetupManagers();
+        StartGameProcess();
     }
 
-    // --------------------------
-    // ステージ CSV を読み込み
-    // --------------------------
-    private void LoadStageData()
+    /// <summary>
+    /// StageDataManager からステージ番号を取得し、
+    /// 対応する CSV (例: Stage_1) から PersonData[] を読み込む。
+    /// </summary>
+private void LoadStageData()
+{
+    int stageNum = StageDataManager.Instance.SelectedStage;
+
+    string csvName = $"Stage_{stageNum}";
+    var list = PersonCSVLoader.LoadFromCSV(csvName);
+    personDatas = list.ToArray();
+
+    uiManager.Initialize(personDatas.Length,stageNum);
+    documentManager.SetPersonManager(personManager);
+    documentManager.SetUIManager(uiManager);
+}
+
+
+    /// <summary>
+    /// DocumentManager に PersonManager / UIManager を渡して
+    /// 依存関係を一元化する。
+    /// </summary>
+    private void SetupManagers()
     {
-        int stageNum = StageDataManager.GetStageNumber();
-
-        string csvName = $"Stage_{stageNum}";
-        personDatas = PersonCSVLoader.LoadFromCSV(csvName).ToArray();
-
-        uiManager.Initialize(personDatas.Length);
-
-        // DocumentManager にセット
-        documentManager.Setup(personDatas);
-    }
-
-    // --------------------------
-    // 最初の人物出現
-    // --------------------------
-    private void StartFirstPerson()
-    {
-        SpawnPersonAndStartDocuments();
-    }
-
-    // --------------------------
-    // 人物スポーン → 書類開始
-    // --------------------------
-    private void SpawnPersonAndStartDocuments()
-    {
-        if (currentPersonIndex >= personDatas.Length)
+        if (documentManager == null)
         {
-            Debug.Log("全員捌き終わり → リザルトシーンへ");
-            //uiManager.ShowResult();
+            Debug.LogError("GameManager: DocumentManager が Inspector に設定されていません。");
+            return;
+        }
+        if (personManager == null)
+        {
+            Debug.LogError("GameManager: PersonManager が Inspector に設定されていません。");
+            return;
+        }
+        if (uiManager == null)
+        {
+            Debug.LogError("GameManager: UIManager が Inspector に設定されていません。");
             return;
         }
 
-        // 人物スポーン
-        currentPerson = personManager.SpawnPerson(personDatas[currentPersonIndex]);
+        // DocumentManager 側に参照を渡す（DocumentManager に以下メソッドがある前提）
+        documentManager.SetPersonManager(personManager);
+        documentManager.SetUIManager(uiManager);
 
-        // DocumentManager に人物の怒りメーター参照を渡す
-        documentManager.SetCurrentPerson(currentPerson);
-
-        // 書類処理開始
-        documentManager.StartProcessForPerson(personDatas[currentPersonIndex]);
+        // DocumentManager 側で何か初期化が必要ならこの中で行うようにしておく
+        if (documentManager is IInitializableDocumentManager init)
+        {
+            init.Initialize();
+        }
     }
 
-    // --------------------------
-    // DocumentManager が呼ぶ「次の人へ」
-    // --------------------------
-    public void OnPersonFinished()
+    /// <summary>
+    /// DocumentManager に「このステージの登場人物データ」を渡して処理開始。
+    /// 書類ループや押印判定、次の人へ進める処理はすべて DocumentManager 側で行う。
+    /// </summary>
+    private void StartGameProcess()
     {
-        currentPersonIndex++;
+        if (documentManager == null)
+        {
+            Debug.LogError("GameManager: DocumentManager がありません。");
+            return;
+        }
 
-        uiManager.NextPerson();
+        if (personDatas == null || personDatas.Length == 0)
+        {
+            Debug.LogError("GameManager: personDatas が空のため処理を開始できません。");
+            return;
+        }
 
-        SpawnPersonAndStartDocuments();
+        // DocumentManager 側にこのステージの人物データを渡してメイン処理開始
+        documentManager.BeginProcess(personDatas);
     }
+}
+
+/// <summary>
+/// DocumentManager 側に任意実装させるためのオプションインターフェース。
+/// 必要なければ DocumentManager に実装しなくてもよい。
+/// </summary>
+public interface IInitializableDocumentManager
+{
+    void Initialize();
 }
